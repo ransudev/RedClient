@@ -1,0 +1,49 @@
+{
+	"schemaVersion": 1,
+	"id": "redclient",
+	"version": "${version}",
+	"name": "RedClient",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/redclient/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "red.client.RedClient",
+				"adapter": "kotlin"
+			}
+		],
+		"client": [
+			{
+				"value": "red.client.RedClientClient",
+				"adapter": "kotlin"
+			},
+			"red.client.flarecombat.FlareCombatMacro"
+		]
+	},
+	"mixins": [
+		"redclient.mixins.json",
+		{
+			"config": "redclient.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.17.3",
+		"minecraft": "~1.21.5",
+		"java": ">=21",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}

@@ -125,12 +125,19 @@ public class FlareMacroFeature {
             return;
         }
 
-        // Verify Flare entity still exists
+        // Verify Flare entity still exists or rescan for new one
         if (flareEntity == null || flareEntity.isRemoved() || 
             client.player.distanceTo(flareEntity) > DETECTION_RANGE) {
-            sendMessage("Flare entity lost! Stopping macro...", Formatting.RED);
-            stop();
-            return;
+            
+            // Try to find a new Flare entity
+            if (scanForFlare()) {
+                sendMessage("Target updated: " + getEntityDisplayName(flareEntity), Formatting.GREEN);
+                // Continue with current phase - don't reset the macro
+            } else {
+                // No Flare found - wait and try again next tick
+                // Don't stop the macro, just pause until a Flare appears
+                return;
+            }
         }
 
         // Check if it's time for next Overflux phase

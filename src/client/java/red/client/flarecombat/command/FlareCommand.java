@@ -25,6 +25,9 @@ public class FlareCommand {
                 .then(ClientCommandManager.literal("setclick")
                         .then(ClientCommandManager.argument("count", IntegerArgumentType.integer(1, 10))
                                 .executes(FlareCommand::setClickCount)))
+                .then(ClientCommandManager.literal("setmode")
+                        .then(ClientCommandManager.argument("mode", IntegerArgumentType.integer(1, 2))
+                                .executes(FlareCommand::setCombatMode)))
                 .then(ClientCommandManager.literal("keybind")
                         .then(ClientCommandManager.argument("key", IntegerArgumentType.integer())
                                 .executes(FlareCommand::setKeybind)))
@@ -73,6 +76,21 @@ public class FlareCommand {
         int count = IntegerArgumentType.getInteger(context, "count");
         FlareConfig.setClickCount(count);
         sendMessage("Click count set to: " + count, Formatting.GREEN);
+
+        return 1;
+    }
+
+    private static int setCombatMode(CommandContext<FabricClientCommandSource> context) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null) {
+            return 0;
+        }
+
+        int mode = IntegerArgumentType.getInteger(context, "mode");
+        FlareConfig.setCombatMode(mode);
+        
+        String modeName = mode == 1 ? "Hyperion" : "Fire Veil Wand";
+        sendMessage("Combat mode set to: " + modeName, Formatting.GREEN);
 
         return 1;
     }
@@ -130,7 +148,10 @@ public class FlareCommand {
         sendMessage("=== FlareCombat Status ===", Formatting.AQUA);
         sendMessage("Macro: " + (FlareMacroFeature.isEnabled() ? "RUNNING" : "STOPPED"),
                 FlareMacroFeature.isEnabled() ? Formatting.GREEN : Formatting.RED);
-        sendMessage("Click Count: " + FlareConfig.getClickCount(), Formatting.YELLOW);
+        sendMessage("Combat Mode: " + FlareConfig.getCombatModeName(), Formatting.YELLOW);
+        sendMessage("Click Count: " + FlareConfig.getClickCount() + 
+                (FlareConfig.getCombatMode() == 2 ? " (not used in Fire Veil Wand mode)" : ""), 
+                Formatting.YELLOW);
         
         int keyCode = FlareConfig.getKeybindCode();
         String keyName = keyCode == -1 ? "Not set" : (GLFW.glfwGetKeyName(keyCode, 0) != null ? 

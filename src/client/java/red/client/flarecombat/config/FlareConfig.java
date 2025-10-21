@@ -72,9 +72,30 @@ public class FlareConfig {
         save();
     }
 
+    public static int getCombatMode() {
+        return data.combatMode;
+    }
+
+    public static void setCombatMode(int mode) {
+        data.combatMode = mode;
+        save();
+    }
+
+    public static String getCombatModeName() {
+        switch (data.combatMode) {
+            case 1:
+                return "Hyperion";
+            case 2:
+                return "Fire Veil Wand";
+            default:
+                return "Hyperion";
+        }
+    }
+
     private static class ConfigData {
         int clickCount = 3; // Default 3 clicks
         int keybindCode = -1; // -1 means no keybind set
         boolean ungrabMouse = false; // Default ungrab mouse disabled
+        int combatMode = 1; // Default mode: 1 = Hyperion, 2 = Fire Veil Wand
     }
 }

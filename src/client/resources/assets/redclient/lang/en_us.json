@@ -1,4 +1,7 @@
 {
   "key.flarecombat.toggle": "Toggle FlareCombat Macro",
-  "category.flarecombat": "FlareCombat Macro"
+  "category.flarecombat": "FlareCombat Macro",
+  "key.autofish.toggle": "Toggle Auto Fishing",
+  "key.redclient.gui": "Open RedClient GUI",
+  "category.autofish": "RedClient Features"
 }

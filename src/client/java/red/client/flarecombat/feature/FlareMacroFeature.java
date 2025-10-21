@@ -87,7 +87,7 @@ public class FlareMacroFeature {
         }
 
         sendMessage("Macro started! Targeting: " + getEntityDisplayName(flareEntity), Formatting.GREEN);
-        sendMessage("Overflux slot: " + overfluxSlot + " | Hyperion slot: " + hyperionSlot, Formatting.YELLOW);
+        sendMessage("Mode: " + FlareConfig.getCombatModeName() + " | Overflux slot: " + overfluxSlot + " | Weapon slot: " + hyperionSlot, Formatting.YELLOW);
     }
 
     public static void stop() {
@@ -194,36 +194,52 @@ public class FlareMacroFeature {
                 break;
 
             case OVERFLUX_WAIT_CLICK:
-                // Overflux phase complete, move to Hyperion loop
+                // Overflux phase complete, move to weapon loop
                 currentPhase = MacroPhase.HYPERION_LOOP;
                 hyperionClickCounter = 0;
-                sendMessage("Overflux activated! Starting Hyperion loop...", Formatting.GREEN);
+                String modeName = FlareConfig.getCombatModeName();
+                sendMessage("Overflux activated! Starting " + modeName + " loop...", Formatting.GREEN);
                 break;
 
             case HYPERION_LOOP:
-                // Execute Hyperion attack loop
-                executeHyperionLoop(client);
+                // Execute weapon attack loop (Hyperion or Fire Veil Wand)
+                executeWeaponLoop(client);
                 break;
         }
     }
 
-    private static void executeHyperionLoop(MinecraftClient client) {
-        // Switch to Hyperion
+    private static void executeWeaponLoop(MinecraftClient client) {
+        int combatMode = FlareConfig.getCombatMode();
+
+        // Switch to weapon slot (Hyperion or Fire Veil Wand)
         if (hyperionSlot != -1 && client.player.getInventory().getSelectedSlot() != hyperionSlot) {
             client.player.getInventory().setSelectedSlot(hyperionSlot);
             phaseTimer = getRandomizedWait(); // Wait after switch with humanization
             return;
         }
 
-        // Perform right-clicks
-        if (hyperionClickCounter < FlareConfig.getClickCount()) {
+        // Mode 1: Hyperion - Multiple clicks
+        if (combatMode == 1) {
+            if (hyperionClickCounter < FlareConfig.getClickCount()) {
+                MouseSimulator.simulateRightClick(client);
+                hyperionClickCounter++;
+                
+                // If we've completed all clicks, set a longer wait before next iteration
+                if (hyperionClickCounter >= FlareConfig.getClickCount()) {
+                    phaseTimer = getRandomizedWait(); // Longer wait after completing all clicks
+                } else {
+                    phaseTimer = getRandomizedClickDelay(); // Short delay between clicks
+                }
+            } else {
+                // All clicks done, reset counter and wait before next loop iteration
+                hyperionClickCounter = 0;
+                phaseTimer = getRandomizedWait();
+            }
+        }
+        // Mode 2: Fire Veil Wand - Single click only
+        else if (combatMode == 2) {
             MouseSimulator.simulateRightClick(client);
-            hyperionClickCounter++;
-            phaseTimer = getRandomizedClickDelay(); // Humanized delay between clicks
-        } else {
-            // Reset counter for next loop iteration
-            hyperionClickCounter = 0;
-            phaseTimer = getRandomizedWait(); // Wait before next loop iteration
+            phaseTimer = getRandomizedWait(); // Wait before next single click
         }
     }
 
@@ -299,6 +315,9 @@ public class FlareMacroFeature {
         overfluxSlot = -1;
         hyperionSlot = -1;
 
+        int combatMode = FlareConfig.getCombatMode();
+        String weaponToFind = combatMode == 1 ? "Hyperion" : "Fire Veil Wand";
+
         // Scan hotbar (slots 0-8)
         for (int i = 0; i < 9; i++) {
             ItemStack stack = client.player.getInventory().getStack(i);
@@ -312,8 +331,17 @@ public class FlareMacroFeature {
                 overfluxSlot = i;
             }
 
-            if (itemName.contains("Hyperion")) {
+            if (itemName.contains(weaponToFind)) {
                 hyperionSlot = i;
+            }
+        }
+
+        if (overfluxSlot == -1 || hyperionSlot == -1) {
+            if (overfluxSlot == -1) {
+                sendMessage("Overflux Power Orb not found in hotbar!", Formatting.RED);
+            }
+            if (hyperionSlot == -1) {
+                sendMessage(weaponToFind + " not found in hotbar!", Formatting.RED);
             }
         }
 

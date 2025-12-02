@@ -11,6 +11,9 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import red.client.flarecombat.config.FlareConfig;
 import red.client.flarecombat.feature.FlareMacroFeature;
+import red.client.fishing.config.BezalFarmerConfig;
+import red.client.fishing.feature.BezalFarmer;
+import red.client.fishing.feature.XYZMacro;
 
 /**
  * Hunting section for Flare Combat Macro controls
@@ -26,6 +29,18 @@ public class HuntingSection extends FlowLayout {
     private LabelComponent clickCountLabel;
     private ButtonComponent modeButton;
     private ButtonComponent clickButton;
+    
+    // BezalFarmer UI Components
+    private LabelComponent bezalStatusLabel;
+    private ButtonComponent bezalToggleButton;
+    private LabelComponent bezalAutoAimLabel;
+    private ButtonComponent bezalAutoAimButton;
+    private LabelComponent bezalBlackholeLabel;
+    private ButtonComponent bezalBlackholeButton;
+    
+    // XYZ Macro UI Components
+    private LabelComponent xyzStatusLabel;
+    private ButtonComponent xyzToggleButton;
 
     public HuntingSection() {
         super(Sizing.fill(100), Sizing.content(), Algorithm.VERTICAL);
@@ -58,13 +73,6 @@ public class HuntingSection extends FlowLayout {
         );
 
         this.child(headerRow);
-
-        // Description
-        this.child(
-                Components.label(Text.literal("Automatically detects and attacks flare mobs"))
-                        .color(Color.ofRgb(0xCCCCCC))
-                        .shadow(false)
-        );
 
         // Status section
         FlowLayout statusSection = (FlowLayout) Containers.verticalFlow(Sizing.fill(100), Sizing.content())
@@ -132,25 +140,145 @@ public class HuntingSection extends FlowLayout {
 
         this.child(buttonRow2);
 
-        // Info section
-        FlowLayout infoSection = (FlowLayout) Containers.verticalFlow(Sizing.fill(100), Sizing.content())
-                .surface(Surface.flat(0x22222200))
+        // ===== BEZAL FARMER SECTION =====
+        // Spacer
+        FlowLayout spacer = (FlowLayout) Containers.verticalFlow(Sizing.fill(100), Sizing.fixed(16));
+        this.child(spacer);
+        
+        // BezalFarmer header
+        FlowLayout bezalHeaderRow = (FlowLayout) Containers.horizontalFlow(Sizing.fill(100), Sizing.content())
+                .gap(6)
+                .verticalAlignment(VerticalAlignment.CENTER);
+
+        bezalHeaderRow.child(
+                Components.label(Text.literal("🌊"))
+                        .color(Color.ofRgb(0x00FFFF))
+                        .shadow(true)
+        );
+
+        bezalHeaderRow.child(
+                Components.label(Text.literal("Bezal Farmer"))
+                        .color(Color.ofRgb(0x00FFFF))
+                        .shadow(true)
+        );
+
+        this.child(bezalHeaderRow);
+
+        // BezalFarmer Status section
+        FlowLayout bezalStatusSection = (FlowLayout) Containers.verticalFlow(Sizing.fill(100), Sizing.content())
+                .surface(Surface.flat(0x22000000))
                 .padding(Insets.of(8));
-        infoSection.gap(2);
+        bezalStatusSection.gap(4);
 
-        infoSection.child(createInfoLabel("• Hyperion: Right-click attack mode"));
-        infoSection.child(createInfoLabel("• Fire Veil Wand: Single-click attack"));
-        infoSection.child(createInfoLabel("• Click Count: 1-10 (Hyperion only)"));
-        infoSection.child(createInfoLabel("• Toggle with keybind (default: V)"));
+        this.bezalStatusLabel = (LabelComponent) Components.label(Text.literal("Status: Disabled"))
+                .color(Color.ofRgb(0xFF5252))
+                .shadow(false);
+        bezalStatusSection.child(this.bezalStatusLabel);
 
-        this.child(infoSection);
-    }
+        this.child(bezalStatusSection);
 
-    private LabelComponent createInfoLabel(String text) {
-        return (LabelComponent) Components.label(Text.literal(text))
-                .color(Color.ofRgb(0xAAAAAA))
-                .shadow(false)
-                .sizing(Sizing.content(), Sizing.content());
+        // BezalFarmer Control buttons
+        FlowLayout bezalButtonRow = (FlowLayout) Containers.horizontalFlow(Sizing.fill(100), Sizing.content())
+                .gap(8)
+                .horizontalAlignment(HorizontalAlignment.LEFT);
+
+        this.bezalToggleButton = (ButtonComponent) Components.button(
+                Text.literal("Enable Bezal Farmer"), 
+                button -> toggleBezalFarmer()
+        ).horizontalSizing(Sizing.fixed(160));
+        
+        bezalButtonRow.child(this.bezalToggleButton);
+
+        bezalButtonRow.child(
+                Components.button(Text.literal("Info"), button -> showBezalInfo())
+                        .horizontalSizing(Sizing.fixed(70))
+        );
+
+        this.child(bezalButtonRow);
+        
+        // BezalFarmer Auto-Aim section
+        FlowLayout bezalAutoAimRow = (FlowLayout) Containers.horizontalFlow(Sizing.fill(100), Sizing.content())
+                .gap(8)
+                .verticalAlignment(VerticalAlignment.CENTER);
+
+        this.bezalAutoAimLabel = (LabelComponent) Components.label(Text.literal("Auto-Aim: ON"))
+                .color(Color.ofRgb(0x4CAF50))
+                .shadow(false);
+        bezalAutoAimRow.child(this.bezalAutoAimLabel);
+
+        this.bezalAutoAimButton = (ButtonComponent) Components.button(
+                Text.literal("Disable Auto-Aim"), 
+                button -> toggleBezalAutoAim()
+        ).horizontalSizing(Sizing.fixed(130));
+        
+        bezalAutoAimRow.child(this.bezalAutoAimButton);
+
+        this.child(bezalAutoAimRow);
+
+        // ===== BLACKHOLE SETTINGS SECTION =====
+        FlowLayout bezalBlackholeRow = (FlowLayout) Containers.horizontalFlow(Sizing.fill(100), Sizing.content())
+                .gap(8)
+                .verticalAlignment(VerticalAlignment.CENTER);
+
+        this.bezalBlackholeLabel = (LabelComponent) Components.label(Text.literal("Blackhole: OFF"))
+                .color(Color.ofRgb(0xFF5252))
+                .shadow(false);
+        bezalBlackholeRow.child(this.bezalBlackholeLabel);
+
+        this.bezalBlackholeButton = (ButtonComponent) Components.button(
+                Text.literal("Enable Blackhole"), 
+                button -> toggleBezalBlackhole()
+        ).horizontalSizing(Sizing.fixed(130));
+        
+        bezalBlackholeRow.child(this.bezalBlackholeButton);
+
+        this.child(bezalBlackholeRow);
+        
+        // ===== XYZ MACRO SECTION =====
+        FlowLayout xyzHeader = (FlowLayout) Containers.horizontalFlow(Sizing.fill(100), Sizing.content())
+                .gap(6)
+                .verticalAlignment(VerticalAlignment.CENTER)
+                .padding(Insets.of(0, 10, 0, 0)); // Top margin
+
+        xyzHeader.child(
+                Components.label(Text.literal("🎣"))
+                        .color(Color.ofRgb(0xAA00FF))
+                        .shadow(true)
+        );
+
+        xyzHeader.child(
+                Components.label(Text.literal("XYZ Lasso Macro"))
+                        .color(Color.ofRgb(0xAA00FF))
+                        .shadow(true)
+        );
+
+        this.child(xyzHeader);
+        
+        // XYZ Status section
+        FlowLayout xyzStatusSection = (FlowLayout) Containers.verticalFlow(Sizing.fill(100), Sizing.content())
+                .surface(Surface.flat(0x22000000))
+                .padding(Insets.of(8));
+        xyzStatusSection.gap(4);
+
+        this.xyzStatusLabel = (LabelComponent) Components.label(Text.literal("Status: Disabled"))
+                .color(Color.ofRgb(0xFF5252))
+                .shadow(false);
+        xyzStatusSection.child(this.xyzStatusLabel);
+
+        this.child(xyzStatusSection);
+        
+        // XYZ Controls
+        FlowLayout xyzToggleRow = (FlowLayout) Containers.horizontalFlow(Sizing.fill(100), Sizing.content())
+                .gap(6)
+                .padding(Insets.of(4));
+
+        this.xyzToggleButton = (ButtonComponent) Components.button(
+                Text.literal("Start XYZ Macro"), 
+                button -> toggleXYZMacro()
+        ).horizontalSizing(Sizing.fixed(200));
+        
+        xyzToggleRow.child(this.xyzToggleButton);
+        this.child(xyzToggleRow);
     }
 
     /**
@@ -253,6 +381,77 @@ public class HuntingSection extends FlowLayout {
     }
 
     /**
+     * Toggle BezalFarmer on/off
+     */
+    private void toggleBezalFarmer() {
+        BezalFarmer.toggle();
+        refresh();
+    }
+
+    /**
+     * Toggle BezalFarmer Auto-Aim
+     */
+    private void toggleBezalAutoAim() {
+        boolean currentState = BezalFarmerConfig.isAutoAimEnabled();
+        BezalFarmerConfig.setAutoAimEnabled(!currentState);
+        refresh();
+    }
+
+    /**
+     * Toggle Blackhole usage on low HP
+     */
+    private void toggleBezalBlackhole() {
+        boolean currentState = BezalFarmerConfig.isBlackholeEnabled();
+        BezalFarmerConfig.setBlackholeEnabled(!currentState);
+        refresh();
+    }
+    
+    /**
+     * Toggle XYZ Macro on/off
+     */
+    private void toggleXYZMacro() {
+        XYZMacro.toggle();
+        refresh();
+    }
+
+    /**
+     * Show information about BezalFarmer
+     */
+    private void showBezalInfo() {
+        if (client.player != null) {
+            client.player.sendMessage(Text.literal(""), false);
+            client.player.sendMessage(
+                    Text.literal("=== Bezal Farmer ===").formatted(Formatting.GOLD), 
+                    false
+            );
+            client.player.sendMessage(
+                    Text.literal("Status: ").formatted(Formatting.GRAY)
+                            .append(Text.literal(BezalFarmer.isEnabled() ? "ENABLED" : "DISABLED")
+                                    .formatted(BezalFarmer.isEnabled() ? Formatting.GREEN : Formatting.RED)), 
+                    false
+            );
+            client.player.sendMessage(
+                    Text.literal("Attack Distance: ").formatted(Formatting.GRAY)
+                            .append(Text.literal(String.format("%.1f", BezalFarmerConfig.getAttackDistance())).formatted(Formatting.YELLOW))
+                            .append(Text.literal(" blocks").formatted(Formatting.GRAY)), 
+                    false
+            );
+            client.player.sendMessage(
+                    Text.literal("Clicks per Attack: ").formatted(Formatting.GRAY)
+                            .append(Text.literal(String.valueOf(BezalFarmerConfig.getClickCount())).formatted(Formatting.YELLOW)), 
+                    false
+            );
+            client.player.sendMessage(
+                    Text.literal("Auto-Aim: ").formatted(Formatting.GRAY)
+                            .append(Text.literal(BezalFarmerConfig.isAutoAimEnabled() ? "ON" : "OFF")
+                                    .formatted(BezalFarmerConfig.isAutoAimEnabled() ? Formatting.GREEN : Formatting.RED)), 
+                    false
+            );
+            client.player.sendMessage(Text.literal(""), false);
+        }
+    }
+
+    /**
      * Refresh the section to update status and buttons
      */
     public void refresh() {
@@ -288,5 +487,97 @@ public class HuntingSection extends FlowLayout {
         String clickNote = FlareConfig.getCombatMode() == 2 ? " (unused)" : "";
         this.clickCountLabel.text(Text.literal("Click Count: " + clickCount + clickNote));
         this.clickCountLabel.color(Color.ofRgb(0xFFAA00));
+
+        // ===== REFRESH BEZAL FARMER =====
+        if (this.bezalStatusLabel != null && this.bezalToggleButton != null && this.bezalAutoAimLabel != null) {
+            refreshBezalFarmer();
+        }
+        
+        // ===== REFRESH XYZ MACRO =====
+        if (this.xyzStatusLabel != null && this.xyzToggleButton != null) {
+            refreshXYZMacro();
+        }
+    }
+
+    /**
+     * Refresh BezalFarmer section status
+     */
+    private void refreshBezalFarmer() {
+        boolean isEnabled = BezalFarmer.isEnabled();
+        String statusText = BezalFarmer.getStatusText();
+
+        // Update status label
+        if (isEnabled) {
+            // Color based on tracking status
+            if (BezalFarmer.getTrackedBezal() != null) {
+                if (BezalFarmer.isInAttackRange()) {
+                    this.bezalStatusLabel.text(Text.literal(statusText + " ●"));
+                    this.bezalStatusLabel.color(Color.ofRgb(0x4CAF50)); // Green - attacking
+                } else {
+                    this.bezalStatusLabel.text(Text.literal(statusText + " ●"));
+                    this.bezalStatusLabel.color(Color.ofRgb(0xFFEB3B)); // Yellow - tracking but too far
+                }
+            } else {
+                this.bezalStatusLabel.text(Text.literal(statusText + " ●"));
+                this.bezalStatusLabel.color(Color.ofRgb(0xFF9800)); // Orange - searching
+            }
+        } else {
+            this.bezalStatusLabel.text(Text.literal(statusText + " ○"));
+            this.bezalStatusLabel.color(Color.ofRgb(0xFF5252)); // Red - disabled
+        }
+
+        // Update button
+        this.bezalToggleButton.setMessage(Text.literal(isEnabled ? "Disable Bezal Farmer" : "Enable Bezal Farmer"));
+
+        // Update Auto-Aim status
+        boolean autoAimEnabled = BezalFarmerConfig.isAutoAimEnabled();
+        if (autoAimEnabled) {
+            this.bezalAutoAimLabel.text(Text.literal("Auto-Aim: ON"));
+            this.bezalAutoAimLabel.color(Color.ofRgb(0x4CAF50)); // Green
+        } else {
+            this.bezalAutoAimLabel.text(Text.literal("Auto-Aim: OFF"));
+            this.bezalAutoAimLabel.color(Color.ofRgb(0xFF5252)); // Red
+        }
+        this.bezalAutoAimButton.setMessage(Text.literal(autoAimEnabled ? "Disable Auto-Aim" : "Enable Auto-Aim"));
+
+        // Update Blackhole status
+        boolean blackholeEnabled = BezalFarmerConfig.isBlackholeEnabled();
+        if (this.bezalBlackholeLabel != null && this.bezalBlackholeButton != null) {
+            if (blackholeEnabled) {
+                this.bezalBlackholeLabel.text(Text.literal("Blackhole: ON"));
+                this.bezalBlackholeLabel.color(Color.ofRgb(0x4CAF50)); // Green
+            } else {
+                this.bezalBlackholeLabel.text(Text.literal("Blackhole: OFF"));
+                this.bezalBlackholeLabel.color(Color.ofRgb(0xFF5252)); // Red
+            }
+            this.bezalBlackholeButton.setMessage(Text.literal(blackholeEnabled ? "Disable Blackhole" : "Enable Blackhole"));
+        }
+    }
+    
+    /**
+     * Refresh XYZ Macro section status
+     */
+    private void refreshXYZMacro() {
+        boolean isEnabled = XYZMacro.isEnabled();
+        String statusText = XYZMacro.getStatusText();
+
+        // Update status label
+        if (isEnabled) {
+            this.xyzStatusLabel.text(Text.literal(statusText + " ●"));
+            // Color based on state
+            if (statusText.contains("Throwing") || statusText.contains("Reeling")) {
+                this.xyzStatusLabel.color(Color.ofRgb(0x4CAF50)); // Green - active
+            } else if (statusText.contains("Rotating")) {
+                this.xyzStatusLabel.color(Color.ofRgb(0xFFEB3B)); // Yellow - preparing
+            } else {
+                this.xyzStatusLabel.color(Color.ofRgb(0xFF9800)); // Orange - searching
+            }
+        } else {
+            this.xyzStatusLabel.text(Text.literal(statusText + " ○"));
+            this.xyzStatusLabel.color(Color.ofRgb(0xFF5252)); // Red - disabled
+        }
+
+        // Update button
+        this.xyzToggleButton.setMessage(Text.literal(isEnabled ? "Stop XYZ Macro" : "Start XYZ Macro"));
     }
 }

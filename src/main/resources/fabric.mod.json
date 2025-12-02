@@ -28,6 +28,9 @@
 			},
 			"red.client.flarecombat.FlareCombatMacro",
 			"red.client.fishing.FishingMod"
+		],
+		"modmenu": [
+			"red.client.integration.ModMenuIntegration"
 		]
 	},
 	"mixins": [

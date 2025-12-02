@@ -62,8 +62,8 @@ public class RedCommand {
         sendCategory("Configuration");
         sendCommand("/fish keybind <keycode>", "Set toggle keybind");
         sendCommand("/fish ungrab <true/false>", "Enable/disable mouse ungrab");
-        sendCommand("/fish recastdelay <2-50>", "Set recast delay (ticks)");
-        sendCommand("/fish reelingdelay <2-15>", "Set reeling delay (ticks)");
+        sendCommand("/fish recastdelay <0-50>", "Set recast delay (ticks)");
+        sendCommand("/fish reelingdelay <0-15>", "Set reeling delay (ticks)");
         
         sendCategory("Information");
         sendCommand("/red help", "Show this help message");

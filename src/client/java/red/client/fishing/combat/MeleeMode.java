@@ -9,23 +9,38 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
-import org.lwjgl.glfw.GLFW;
-import red.client.flarecombat.mixin.MouseMixin;
 import red.client.fishing.util.RotationManager;
 import red.client.fishing.util.WeaponDetector;
+import red.client.fishing.feature.SeaCreatureKiller;
+
+import org.lwjgl.glfw.GLFW;
+import red.client.flarecombat.mixin.MouseMixin;
 
 import java.util.*;
+import java.util.Comparator;
+import java.util.Random;
 
 /**
- * Melee Combat Mode
- * Complex implementation with armor stand detection, entity tracking, and rotation management
- * Uses left-click attacks with proper targeting and click rate limiting
+ * Melee Combat Mode - Exact implementation based on FishMaster's MeleeMode
+ * 
+ * Uses armor stand detection to find actual sea creature entities
+ * Implements smooth continuous rotation tracking via RotationManager
+ * Enforces click rate limiting (~3 clicks per second)
+ * Explicitly rejects RCM weapons (Hyperion, Fire Veil Wand)
+ * 
+ * Attack Flow:
+ * 1. Find or validate target creature (via armor stand name tags)
+ * 2. Check click rate limiting (334ms minimum interval)
+ * 3. Switch to melee weapon (priority: Figstone > Prime Axe > other)
+ * 4. Find actual entity via armor stand detection
+ * 5. Start continuous rotation tracking via RotationManager.trackTarget()
+ * 6. Simulate left click (click happens while tracking is active)
+ * 7. RotationManager.tick() continues updating every frame in SeaCreatureKiller.tick()
  */
 public class MeleeMode implements CombatMode {
     
-    private static final long MIN_ATTACK_INTERVAL = 334; // ~3 attacks per second (1000ms / 3)
+    private static final long MIN_ATTACK_INTERVAL = 334; // ~3 attacks per second
     private static final double ENTITY_SEARCH_RANGE = 15.0;
-    private static final Random random = new Random();
     
     private long lastAttackTime = 0;
     private int originalSlot = -1;
@@ -44,10 +59,10 @@ public class MeleeMode implements CombatMode {
             return false;
         }
         
-        // Check click rate limiting
+        // Check click rate limiting first
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastAttackTime < MIN_ATTACK_INTERVAL) {
-            return false; // Skip to maintain rate limit
+            return false;
         }
         
         if (!canAttack()) {
@@ -66,18 +81,22 @@ public class MeleeMode implements CombatMode {
             return false;
         }
         
-        // Find actual entity to attack (resolve armor stand to real entity)
+        // Find actual entity to attack using armor stand detection (FishMaster approach)
         Entity actualTarget = findActualSeaCreature(target);
         if (actualTarget == null) {
             actualTarget = target;
         }
         
+        if (actualTarget == null) {
+            return false;
+        }
+        
         actualTargetEntity = actualTarget;
         
-        // Update rotation to look at target
+        // Start continuous tracking to the target
         updateRotationTarget(actualTarget);
         
-        // Perform left-click attack
+        // Execute the attack immediately (rotation will update continuously via tick())
         simulateLeftClick(client);
         lastAttackTime = currentTime;
         
@@ -110,6 +129,9 @@ public class MeleeMode implements CombatMode {
         if (actualTargetEntity == null) {
             actualTargetEntity = target;
         }
+        
+        // Start tracking immediately
+        updateRotationTarget(actualTargetEntity);
     }
     
     @Override
@@ -148,7 +170,9 @@ public class MeleeMode implements CombatMode {
         // Check hotbar for melee weapons
         for (int i = 0; i < 9; i++) {
             ItemStack stack = client.player.getInventory().getStack(i);
-            if (WeaponDetector.isMeleeWeapon(stack)) {
+            if (WeaponDetector.isMeleeWeapon(stack) && 
+                !WeaponDetector.isHyperion(stack) && 
+                !WeaponDetector.isFireVeilWand(stack)) {
                 return true;
             }
         }
@@ -158,6 +182,8 @@ public class MeleeMode implements CombatMode {
     
     /**
      * Update rotation to smoothly track the target entity
+     * Uses RotationManager.trackTarget() which continuously updates until stopTracking() is called
+     * This method is based on FishMaster's RotationHandler usage
      */
     private void updateRotationTarget(Entity target) {
         if (target == null) {
@@ -167,26 +193,54 @@ public class MeleeMode implements CombatMode {
         
         Vec3d targetPos = target.getPos().add(0.0, target.getHeight() * 0.5, 0.0);
         
-        // Use smooth continuous tracking
+        // Use smooth continuous tracking (0.3f = reasonable smoothing speed, like FishMaster)
         rotationManager.trackTarget(targetPos, 0.3f);
     }
     
     /**
      * Switch to melee weapon in hotbar
+     * IMPORTANT: Explicitly rejects RCM weapons (Hyperion, Fire Veil Wand)
+     * Prioritizes: Figstone Splitter > Prime Axe > Other melee weapons
      */
     private boolean switchToMeleeWeapon() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return false;
         
         ItemStack currentItem = client.player.getMainHandStack();
-        if (WeaponDetector.isMeleeWeapon(currentItem)) {
+        
+        // If already holding a melee weapon (but NOT RCM weapons), keep it
+        if (WeaponDetector.isMeleeWeapon(currentItem) && 
+            !WeaponDetector.isHyperion(currentItem) && 
+            !WeaponDetector.isFireVeilWand(currentItem)) {
             return true;
         }
         
-        // Search hotbar for melee weapon
+        // Priority 1: Find Figstone Splitter
         for (int i = 0; i < 9; i++) {
             ItemStack stack = client.player.getInventory().getStack(i);
-            if (WeaponDetector.isMeleeWeapon(stack)) {
+            String name = stack.getName().getString().toLowerCase();
+            if (name.contains("figstone splitter")) {
+                client.player.getInventory().setSelectedSlot(i);
+                return true;
+            }
+        }
+        
+        // Priority 2: Find Prime Axe
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = client.player.getInventory().getStack(i);
+            String name = stack.getName().getString().toLowerCase();
+            if (name.contains("prime axe")) {
+                client.player.getInventory().setSelectedSlot(i);
+                return true;
+            }
+        }
+        
+        // Priority 3: Find any other melee weapon (but NOT RCM weapons)
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = client.player.getInventory().getStack(i);
+            if (WeaponDetector.isMeleeWeapon(stack) && 
+                !WeaponDetector.isHyperion(stack) && 
+                !WeaponDetector.isFireVeilWand(stack)) {
                 client.player.getInventory().setSelectedSlot(i);
                 return true;
             }
@@ -196,7 +250,8 @@ public class MeleeMode implements CombatMode {
     }
     
     /**
-     * Simulate left-click attack using MouseMixin
+     * Simulate left-click attack using MouseMixin (FishMaster's approach)
+     * This directly invokes GLFW mouse button press/release for authentic simulation
      */
     private void simulateLeftClick(MinecraftClient client) {
         if (client == null || client.getWindow() == null) {
@@ -205,14 +260,16 @@ public class MeleeMode implements CombatMode {
         
         try {
             long windowHandle = client.getWindow().getHandle();
+            
+            // Cast the Mouse instance to MouseMixin interface (applied via Mixin transformation)
             MouseMixin mouseMixin = (MouseMixin) client.mouse;
             
             // Simulate left mouse button press
             mouseMixin.invokeOnMouseButton(windowHandle, GLFW.GLFW_MOUSE_BUTTON_LEFT, GLFW.GLFW_PRESS, 0);
             
-            // Human-like click duration
+            // Small delay to simulate human-like click duration
             try {
-                Thread.sleep(10 + random.nextInt(20)); // 10-30ms
+                Thread.sleep(10 + new Random().nextInt(20)); // 10-30ms delay
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -221,13 +278,13 @@ public class MeleeMode implements CombatMode {
             mouseMixin.invokeOnMouseButton(windowHandle, GLFW.GLFW_MOUSE_BUTTON_LEFT, GLFW.GLFW_RELEASE, 0);
             
         } catch (Exception e) {
-            System.err.println("[MeleeMode] Failed to simulate left click: " + e.getMessage());
+            // Silent failure - not critical for functionality
         }
     }
     
     /**
      * Find actual sea creature entity using armor stand detection
-     * Based on FishMaster's /track command logic
+     * This is the core of FishMaster's approach - matches armor stand names to find real entities
      */
     private Entity findActualSeaCreature(Entity initialTarget) {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -235,37 +292,36 @@ public class MeleeMode implements CombatMode {
         
         List<Entity> possibleEntities = new ArrayList<>();
         
-        // Get target name for searching
-        String targetName = getEntityDisplayName(initialTarget);
-        if (targetName == null || targetName.isEmpty()) return null;
-        
-        // Search for armor stands with matching names
-        Box searchBox = new Box(
-            client.player.getPos().add(-ENTITY_SEARCH_RANGE, -ENTITY_SEARCH_RANGE, -ENTITY_SEARCH_RANGE),
-            client.player.getPos().add(ENTITY_SEARCH_RANGE, ENTITY_SEARCH_RANGE, ENTITY_SEARCH_RANGE)
-        );
-        
-        List<ArmorStandEntity> matchingArmorStands = client.world.getEntitiesByClass(
-            ArmorStandEntity.class,
-            searchBox,
-            armorStand -> {
-                if (armorStand.hasCustomName()) {
-                    String nameTag = armorStand.getCustomName().getString().toLowerCase();
-                    return nameTag.contains(targetName.toLowerCase()) &&
-                           !nameTag.contains(client.player.getName().getString().toLowerCase()) &&
-                           !armorStand.isRemoved() &&
-                           getHealthFromArmorStandName(nameTag) > 0;
+        // Search through all sea creature names
+        for (String creatureName : SeaCreatureKiller.getTargetCreatures()) {
+            // Find armor stands with matching creature names
+            Box searchBox = new Box(
+                client.player.getPos().add(-ENTITY_SEARCH_RANGE, -ENTITY_SEARCH_RANGE, -ENTITY_SEARCH_RANGE),
+                client.player.getPos().add(ENTITY_SEARCH_RANGE, ENTITY_SEARCH_RANGE, ENTITY_SEARCH_RANGE)
+            );
+            
+            List<ArmorStandEntity> matchingArmorStands = client.world.getEntitiesByClass(
+                ArmorStandEntity.class,
+                searchBox,
+                armorStand -> {
+                    if (armorStand.hasCustomName()) {
+                        String nameTag = armorStand.getCustomName().getString().toLowerCase();
+                        return nameTag.contains(creatureName.toLowerCase()) &&
+                               !nameTag.contains(client.player.getName().getString().toLowerCase()) &&
+                               !armorStand.isRemoved() &&
+                               getHealthFromArmorStandName(nameTag) > 0;
+                    }
+                    return false;
                 }
-                return false;
-            }
-        );
-        
-        // For each matching armor stand, find the actual entity
-        for (ArmorStandEntity armorStand : matchingArmorStands) {
-            Entity actualEntity = getEntityBelowArmorStand(armorStand);
-            if (actualEntity != null && actualEntity instanceof LivingEntity &&
-                !actualEntity.equals(client.player) && ((LivingEntity) actualEntity).isAlive()) {
-                possibleEntities.add(actualEntity);
+            );
+            
+            // For each matching armor stand, find the actual entity it represents
+            for (ArmorStandEntity armorStand : matchingArmorStands) {
+                Entity actualEntity = getEntityBelowArmorStand(armorStand);
+                if (actualEntity != null && actualEntity instanceof LivingEntity &&
+                    !actualEntity.equals(client.player) && ((LivingEntity) actualEntity).isAlive()) {
+                    possibleEntities.add(actualEntity);
+                }
             }
         }
         
@@ -273,7 +329,7 @@ public class MeleeMode implements CombatMode {
             return null;
         }
         
-        // Return closest entity
+        // Return the closest entity
         return possibleEntities.stream()
             .min(Comparator.comparingDouble(entity -> client.player.distanceTo(entity)))
             .orElse(null);
@@ -281,6 +337,7 @@ public class MeleeMode implements CombatMode {
     
     /**
      * Get the actual entity that an armor stand represents
+     * FishMaster's approach: expand box around armor stand and find nearby living entities
      */
     private Entity getEntityBelowArmorStand(ArmorStandEntity armorStand) {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -308,11 +365,12 @@ public class MeleeMode implements CombatMode {
     
     /**
      * Extract health value from armor stand name
+     * Looks for patterns like "❤ 100/150" or "100/150"
      */
     private int getHealthFromArmorStandName(String name) {
         int health = 0;
         try {
-            // Look for patterns like "❤ 100/150" or "100/150"
+            // Look for patterns like "❤ 100/150" or "100/150" at the end of the name
             String[] parts = name.split(" ");
             for (String part : parts) {
                 if (part.contains("/") && part.matches(".*\\d+/\\d+.*")) {
@@ -342,4 +400,15 @@ public class MeleeMode implements CombatMode {
     public RotationManager getMeleeRotationManager() {
         return rotationManager;
     }
+    
+    /**
+     * Check if item is a fishing rod
+     */
+    public boolean isFishingRod(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return false;
+        String name = stack.getName().getString().toLowerCase();
+        return name.contains("rod") || name.contains("fishing");
+    }
 }
+
+

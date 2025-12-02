@@ -4,7 +4,13 @@
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"ExampleClientMixin",
-		"MouseAccessorMixin"
+		"MouseAccessorMixin",
+		"SpikeHighlightMixin",
+		"SpikeColorMixin",
+		"MobHighlightMixin",
+		"MobColorMixin",
+		"BezalHighlightMixin",
+		"BezalColorMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

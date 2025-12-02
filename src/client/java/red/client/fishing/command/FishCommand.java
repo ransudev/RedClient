@@ -42,10 +42,10 @@ public class FishCommand {
                         .then(ClientCommandManager.argument("enabled", StringArgumentType.word())
                                 .executes(FishCommand::setUngrabMouse)))
                 .then(ClientCommandManager.literal("recastdelay")
-                        .then(ClientCommandManager.argument("ticks", IntegerArgumentType.integer(2, 50))
+                        .then(ClientCommandManager.argument("ticks", IntegerArgumentType.integer(0, 50))
                                 .executes(FishCommand::setRecastDelay)))
                 .then(ClientCommandManager.literal("reelingdelay")
-                        .then(ClientCommandManager.argument("ticks", IntegerArgumentType.integer(2, 15))
+                        .then(ClientCommandManager.argument("ticks", IntegerArgumentType.integer(0, 15))
                                 .executes(FishCommand::setReelingDelay)))
                 .executes(FishCommand::showStatus));
     }

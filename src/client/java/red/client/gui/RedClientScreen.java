@@ -1,6 +1,7 @@
 package red.client.gui;
 
 import io.wispforest.owo.ui.base.BaseOwoScreen;
+import io.wispforest.owo.ui.component.ButtonComponent;
 import io.wispforest.owo.ui.component.Components;
 import io.wispforest.owo.ui.container.Containers;
 import io.wispforest.owo.ui.container.FlowLayout;
@@ -11,18 +12,46 @@ import net.minecraft.util.Formatting;
 import org.jetbrains.annotations.NotNull;
 import red.client.gui.components.FishingSection;
 import red.client.gui.components.HuntingSection;
+import red.client.gui.components.SchedulerSection;
+import red.client.scheduler.MacroScheduler;
 
 /**
- * Main GUI screen for RedClient
- * Features two main sections:
+ * Main GUI screen for RedClient with tabbed navigation
+ * Features three main tabs:
+ * - Scheduler: Macro run time and break management
  * - Hunting: Flare Combat Macro controls
  * - Fishing: Auto fishing and Sea Creature Killer controls
  */
 public class RedClientScreen extends BaseOwoScreen<FlowLayout> {
-    private FlowLayout mainContent;
-    private ScrollContainer<FlowLayout> scrollContainer;
+    // Tab enum
+    private enum Module {
+        SCHEDULER("📅 Scheduler", 0x64B5F6),
+        HUNTING("🏹 Hunting", 0xFF9800),
+        FISHING("🎣 Fishing", 0x4488FF);
+        
+        final String label;
+        @SuppressWarnings("unused")
+        final int color;
+        
+        Module(String label, int color) {
+            this.label = label;
+            this.color = color;
+        }
+    }
+    
+    @SuppressWarnings({"FieldCanBeLocal", "unused"})
+    private Module currentModule = Module.SCHEDULER;
+    
+    // Tab buttons
+    private ButtonComponent schedulerTabButton;
+    private ButtonComponent huntingTabButton;
+    private ButtonComponent fishingTabButton;
+    
+    // Content container
+    private FlowLayout contentContainer;
     
     // Section components
+    private SchedulerSection schedulerSection;
     private HuntingSection huntingSection;
     private FishingSection fishingSection;
 
@@ -40,20 +69,22 @@ public class RedClientScreen extends BaseOwoScreen<FlowLayout> {
         // Build title section
         buildTitleSection(rootComponent);
 
-        // Create main content area with scroll
-        this.mainContent = (FlowLayout) Containers.verticalFlow(Sizing.fill(100), Sizing.content())
-                .padding(Insets.of(5));
-        this.mainContent.gap(12);
+        // Build tab navigation bar
+        buildTabBar(rootComponent);
 
-        this.scrollContainer = Containers.verticalScroll(
+        // Create main content area with scroll
+        this.contentContainer = (FlowLayout) Containers.verticalFlow(Sizing.fill(100), Sizing.content())
+                .gap(12);
+
+        ScrollContainer<FlowLayout> scrollContainer = Containers.verticalScroll(
                 Sizing.fill(90), 
                 Sizing.fill(75), 
-                this.mainContent
+                this.contentContainer
         );
-        rootComponent.child(this.scrollContainer);
+        rootComponent.child(scrollContainer);
 
-        // Build sections
-        buildSections();
+        // Initialize with first tab
+        switchModule(Module.SCHEDULER);
 
         // Build bottom button row
         buildBottomButtons(rootComponent);
@@ -93,14 +124,77 @@ public class RedClientScreen extends BaseOwoScreen<FlowLayout> {
         rootComponent.child(titleSection);
     }
 
-    private void buildSections() {
-        // Hunting Section (Flare Combat Macro)
-        this.huntingSection = new HuntingSection();
-        this.mainContent.child(this.huntingSection);
+    private void buildTabBar(FlowLayout rootComponent) {
+        FlowLayout tabBar = (FlowLayout) Containers.horizontalFlow(Sizing.fill(100), Sizing.content())
+                .gap(4)
+                .horizontalAlignment(HorizontalAlignment.CENTER)
+                .surface(Surface.flat(0x33000000))
+                .padding(Insets.of(8));
 
-        // Fishing Section (Auto Fishing + Sea Creature Killer)
-        this.fishingSection = new FishingSection();
-        this.mainContent.child(this.fishingSection);
+        this.schedulerTabButton = (ButtonComponent) Components.button(
+                Text.literal(Module.SCHEDULER.label),
+                button -> switchModule(Module.SCHEDULER)
+        ).horizontalSizing(Sizing.fixed(130));
+        
+        this.huntingTabButton = (ButtonComponent) Components.button(
+                Text.literal(Module.HUNTING.label),
+                button -> switchModule(Module.HUNTING)
+        ).horizontalSizing(Sizing.fixed(130));
+        
+        this.fishingTabButton = (ButtonComponent) Components.button(
+                Text.literal(Module.FISHING.label),
+                button -> switchModule(Module.FISHING)
+        ).horizontalSizing(Sizing.fixed(130));
+
+        tabBar.child(this.schedulerTabButton);
+        tabBar.child(this.huntingTabButton);
+        tabBar.child(this.fishingTabButton);
+
+        rootComponent.child(tabBar);
+    }
+
+    private void switchModule(Module module) {
+        this.currentModule = module;
+        
+        // Update tab button appearances
+        updateTabButtonAppearance(this.schedulerTabButton, module == Module.SCHEDULER);
+        updateTabButtonAppearance(this.huntingTabButton, module == Module.HUNTING);
+        updateTabButtonAppearance(this.fishingTabButton, module == Module.FISHING);
+        
+        // Clear and rebuild content
+        this.contentContainer.clearChildren();
+        
+        switch (module) {
+            case SCHEDULER:
+                if (this.schedulerSection == null) {
+                    this.schedulerSection = new SchedulerSection();
+                }
+                this.contentContainer.child(this.schedulerSection);
+                break;
+            case HUNTING:
+                if (this.huntingSection == null) {
+                    this.huntingSection = new HuntingSection();
+                }
+                this.contentContainer.child(this.huntingSection);
+                break;
+            case FISHING:
+                if (this.fishingSection == null) {
+                    this.fishingSection = new FishingSection();
+                }
+                this.contentContainer.child(this.fishingSection);
+                break;
+        }
+        
+        refreshSections();
+    }
+
+    private void updateTabButtonAppearance(ButtonComponent button, boolean isActive) {
+        // Active tabs get disabled appearance
+        if (isActive) {
+            button.active = false;
+        } else {
+            button.active = true;
+        }
     }
 
     private void buildBottomButtons(FlowLayout rootComponent) {
@@ -132,9 +226,12 @@ public class RedClientScreen extends BaseOwoScreen<FlowLayout> {
     }
 
     /**
-     * Refresh all sections to update their state
+     * Refresh all sections
      */
     private void refreshSections() {
+        if (this.schedulerSection != null) {
+            this.schedulerSection.refresh();
+        }
         if (this.huntingSection != null) {
             this.huntingSection.refresh();
         }
@@ -144,7 +241,16 @@ public class RedClientScreen extends BaseOwoScreen<FlowLayout> {
     }
 
     @Override
+    public void tick() {
+        super.tick();
+        // Update scheduler on every tick
+        MacroScheduler.tick();
+        // Refresh sections to update timer displays
+        refreshSections();
+    }
+
+    @Override
     public boolean shouldPause() {
-        return false; // Don't pause the game when GUI is open
+        return false; // Don't pause game when GUI is open
     }
 }

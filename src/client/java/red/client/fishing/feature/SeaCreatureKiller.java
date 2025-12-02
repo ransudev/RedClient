@@ -357,6 +357,10 @@ public class SeaCreatureKiller {
         return targetEntity;
     }
 
+    public static Set<String> getTargetCreatures() {
+        return TARGET_CREATURES;
+    }
+
     public static void reset() {
         enabled = false;
         targetEntity = null;

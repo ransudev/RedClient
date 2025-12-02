@@ -32,4 +32,29 @@ public class FishMouseSimulator {
             System.err.println("[AutoFish] Failed to simulate right click: " + e.getMessage());
         }
     }
+
+    public static void simulateLeftClick(MinecraftClient client) {
+        if (client == null || client.getWindow() == null) {
+            return;
+        }
+
+        try {
+            long windowHandle = client.getWindow().getHandle();
+            MouseMixin mouseMixin = (MouseMixin) client.mouse;
+
+            mouseMixin.invokeOnMouseButton(windowHandle, GLFW.GLFW_MOUSE_BUTTON_LEFT, GLFW.GLFW_PRESS, 0);
+
+            try {
+                Thread.sleep(10 + random.nextInt(20));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+
+            mouseMixin.invokeOnMouseButton(windowHandle, GLFW.GLFW_MOUSE_BUTTON_LEFT, GLFW.GLFW_RELEASE, 0);
+
+        } catch (Exception e) {
+            System.err.println("[MeleeMode] Failed to simulate left click: " + e.getMessage());
+        }
+    }
 }
+

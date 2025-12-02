@@ -20,6 +20,10 @@ repositories {
 	maven {
 		url 'https://maven.wispforest.io/releases/'
 	}
+	maven {
+		name = "Terraformers"
+		url = "https://maven.terraformersmc.com/"
+	}
 }
 
 loom {
@@ -46,6 +50,9 @@ dependencies {
 	
 	// oωo UI library for modern GUI
 	modImplementation "io.wispforest:owo-lib:${project.owo_version}"
+	
+	// ModMenu integration for config screen access
+	modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
 }
 
 processResources {

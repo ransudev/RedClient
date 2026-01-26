@@ -1,2 +1,2 @@
 # RedClient
-Hunting Qol
+Hypixel Skyblock Automation Mod

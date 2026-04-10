@@ -1,0 +1,9 @@
+{
+  "key.flarecombat.toggle": "Toggle FlareCombat Macro",
+  "category.flarecombat": "FlareCombat Macro",
+  "key.autofish.toggle": "Toggle Auto Fishing",
+  "key.redclient.gui": "Open RedClient GUI",
+  "key.spikehelper.toggle": "Toggle Spike Helper",
+  "key.cinderbat.toggle": "Toggle Cinderbat Highlight",
+  "category.autofish": "RedClient Features"
+}

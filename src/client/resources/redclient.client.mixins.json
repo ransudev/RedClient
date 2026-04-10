@@ -1,0 +1,20 @@
+{
+	"required": true,
+	"package": "red.client.mixin.client",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"ExampleClientMixin",
+		"MouseAccessorMixin",
+		"CinderbatHighlightMixin",
+		"CinderbatColorMixin",
+		"SpikeHighlightMixin",
+		"SpikeColorMixin",
+		"MobHighlightMixin",
+		"MobColorMixin",
+		"BezalHighlightMixin",
+		"BezalColorMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

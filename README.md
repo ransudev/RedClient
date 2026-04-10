@@ -142,7 +142,6 @@ Configuration files are stored in `.minecraft/config/`:
 
 ### Dependencies
 - **Fabric API**: Core modding framework
-- **OWO-LIB**: Utility library for UI and events
 - **ModMenu**: In-game mod configuration menu
 - **YACL v3**: Modern configuration GUI framework
 

@@ -13,7 +13,7 @@ import java.util.Random;
 public class FlareMacroFeature {
     private static boolean enabled = false;
     private static Entity flareEntity = null;
-    private static final double DETECTION_RANGE = 6.0;
+    private static final double DETECTION_RANGE = 11.0;
     private static final Random random = new Random();
 
     // Mouse grab state tracking
@@ -27,6 +27,7 @@ public class FlareMacroFeature {
     // Slots
     private static int overfluxSlot = -1;
     private static int hyperionSlot = -1;
+    private static int atonementSlot = -1;
 
     // Timing constants (in ticks, 1 tick = 50ms)
     // Increased delays with humanization ranges
@@ -35,8 +36,30 @@ public class FlareMacroFeature {
     private static final int OVERFLUX_INTERVAL = 800; // 40 seconds = 800 ticks
     private static final int CLICK_DELAY_BASE = 4; // 200ms between clicks (increased from 100ms)
     private static final int CLICK_DELAY_VARIANCE = 2; // ±100ms variance
+    private static final long FLARE_DEATH_TIMEOUT_MS = 30_000L;
+    private static final long ATONEMENT_INTERVAL_MS = 20_000L;
     private static long lastOverfluxTime = 0;
     private static long macroStartTime = 0;
+    private static long clickOnlyWaitStartTime = 0;
+    private static long lastMissingAtonementWarnAt = 0;
+    private static long lastAtonementUseTime = 0;
+    private static int clickOnlyClickCounter = 0;
+
+    private static ClickOnlyState clickOnlyState = ClickOnlyState.CLICK_SEQUENCE;
+    private static HealOverrideState healOverrideState = HealOverrideState.IDLE;
+    private static int healTimer = 0;
+    private static int healReturnSlot = -1;
+
+    private enum ClickOnlyState {
+        CLICK_SEQUENCE,
+        WAIT_FOR_FLARE_DEATH
+    }
+
+    private enum HealOverrideState {
+        IDLE,
+        WAIT_AFTER_WAND_SWITCH,
+        WAIT_AFTER_HEAL_CLICK
+    }
 
     private enum MacroPhase {
         IDLE,
@@ -68,18 +91,31 @@ public class FlareMacroFeature {
             return;
         }
 
-        // Scan for items
-        if (!scanHotbarForItems()) {
-            sendMessage("Cannot start: Required items not found in hotbar!", Formatting.RED);
-            return;
+        boolean clickOnlyMode = isClickOnlyMode();
+        if (!clickOnlyMode) {
+            // Scan for items for weapon/overflux modes
+            if (!scanHotbarForItems()) {
+                sendMessage("Cannot start: Required items not found in hotbar!", Formatting.RED);
+                return;
+            }
+        } else {
+            overfluxSlot = -1;
+            hyperionSlot = -1;
         }
 
         enabled = true;
-        currentPhase = MacroPhase.OVERFLUX_WAIT_INITIAL;
+        currentPhase = clickOnlyMode ? MacroPhase.HYPERION_LOOP : MacroPhase.OVERFLUX_WAIT_INITIAL;
         phaseTimer = getRandomizedWait();
         macroStartTime = System.currentTimeMillis();
         lastOverfluxTime = macroStartTime;
         hyperionClickCounter = 0;
+        clickOnlyClickCounter = 0;
+        clickOnlyState = ClickOnlyState.CLICK_SEQUENCE;
+        clickOnlyWaitStartTime = 0;
+        healOverrideState = HealOverrideState.IDLE;
+        healTimer = 0;
+        healReturnSlot = -1;
+        lastAtonementUseTime = macroStartTime;
 
         // Ungrab mouse if enabled in config
         if (FlareConfig.isUngrabbMouseEnabled()) {
@@ -87,7 +123,11 @@ public class FlareMacroFeature {
         }
 
         sendMessage("Macro started! Targeting: " + getEntityDisplayName(flareEntity), Formatting.GREEN);
-        sendMessage("Mode: " + FlareConfig.getCombatModeName() + " | Overflux slot: " + overfluxSlot + " | Weapon slot: " + hyperionSlot, Formatting.YELLOW);
+        if (clickOnlyMode) {
+            sendMessage("Mode: " + FlareConfig.getCombatModeName() + " | No item checks required", Formatting.YELLOW);
+        } else {
+            sendMessage("Mode: " + FlareConfig.getCombatModeName() + " | Overflux slot: " + overfluxSlot + " | Weapon slot: " + hyperionSlot, Formatting.YELLOW);
+        }
     }
 
     public static void stop() {
@@ -101,6 +141,14 @@ public class FlareMacroFeature {
         flareEntity = null;
         overfluxSlot = -1;
         hyperionSlot = -1;
+        atonementSlot = -1;
+        clickOnlyClickCounter = 0;
+        clickOnlyState = ClickOnlyState.CLICK_SEQUENCE;
+        clickOnlyWaitStartTime = 0;
+        healOverrideState = HealOverrideState.IDLE;
+        healTimer = 0;
+        healReturnSlot = -1;
+        lastAtonementUseTime = 0;
 
         // Restore mouse grab if it was ungrabbed
         if (FlareConfig.isUngrabbMouseEnabled()) {
@@ -125,6 +173,11 @@ public class FlareMacroFeature {
             return;
         }
 
+        // Priority override: use Wand of Atonement every 20 seconds (except click-only mode)
+        if (!isClickOnlyMode() && handleAtonementOverride(client)) {
+            return;
+        }
+
         // Verify Flare entity still exists or rescan for new one
         if (flareEntity == null || flareEntity.isRemoved() || 
             client.player.distanceTo(flareEntity) > DETECTION_RANGE) {
@@ -132,24 +185,35 @@ public class FlareMacroFeature {
             // Try to find a new Flare entity
             if (scanForFlare()) {
                 sendMessage("Target updated: " + getEntityDisplayName(flareEntity), Formatting.GREEN);
+                if (isClickOnlyMode()) {
+                    // A previous flare is gone and a new one is now available - restart click sequence
+                    clickOnlyState = ClickOnlyState.CLICK_SEQUENCE;
+                    clickOnlyClickCounter = 0;
+                    clickOnlyWaitStartTime = 0;
+                }
                 // Continue with current phase - don't reset the macro
             } else {
                 // No Flare found - wait and try again next tick
                 // Don't stop the macro, just pause until a Flare appears
+                if (isClickOnlyMode()) {
+                    clickOnlyState = ClickOnlyState.CLICK_SEQUENCE;
+                    clickOnlyClickCounter = 0;
+                    clickOnlyWaitStartTime = 0;
+                }
                 return;
             }
         }
 
-        // Check if it's time for next Overflux phase
-        long currentTime = System.currentTimeMillis();
-        long timeSinceLastOverflux = currentTime - lastOverfluxTime;
-        
-        if (timeSinceLastOverflux >= (OVERFLUX_INTERVAL * 50) && currentPhase == MacroPhase.HYPERION_LOOP) {
-            // Time to restart Overflux phase
-            currentPhase = MacroPhase.OVERFLUX_WAIT_INITIAL;
-            phaseTimer = getRandomizedWait();
-            lastOverfluxTime = currentTime;
-            sendMessage("Starting Overflux phase...", Formatting.YELLOW);
+        // Check if it's time for next Overflux phase (only in non click-only modes)
+        if (!isClickOnlyMode()) {
+            long currentTime = System.currentTimeMillis();
+            long timeSinceLastOverflux = currentTime - lastOverfluxTime;
+            if (timeSinceLastOverflux >= (OVERFLUX_INTERVAL * 50) && currentPhase == MacroPhase.HYPERION_LOOP) {
+                currentPhase = MacroPhase.OVERFLUX_WAIT_INITIAL;
+                phaseTimer = getRandomizedWait();
+                lastOverfluxTime = currentTime;
+                sendMessage("Starting Overflux phase...", Formatting.YELLOW);
+            }
         }
 
         // Handle phase timer
@@ -211,6 +275,12 @@ public class FlareMacroFeature {
     private static void executeWeaponLoop(MinecraftClient client) {
         int combatMode = FlareConfig.getCombatMode();
 
+        // Mode 3: Flare detect + click only (no overflux/weapon checks)
+        if (combatMode == FlareConfig.COMBAT_MODE_FLARE_CLICK_ONLY) {
+            executeClickOnlyLoop(client);
+            return;
+        }
+
         // Switch to weapon slot (Hyperion or Fire Veil Wand)
         if (hyperionSlot != -1 && client.player.getInventory().getSelectedSlot() != hyperionSlot) {
             client.player.getInventory().setSelectedSlot(hyperionSlot);
@@ -219,7 +289,7 @@ public class FlareMacroFeature {
         }
 
         // Mode 1: Hyperion - Multiple clicks
-        if (combatMode == 1) {
+        if (combatMode == FlareConfig.COMBAT_MODE_HYPERION) {
             if (hyperionClickCounter < FlareConfig.getClickCount()) {
                 MouseSimulator.simulateRightClick(client);
                 hyperionClickCounter++;
@@ -237,10 +307,38 @@ public class FlareMacroFeature {
             }
         }
         // Mode 2: Fire Veil Wand - Single click only
-        else if (combatMode == 2) {
+        else if (combatMode == FlareConfig.COMBAT_MODE_FIRE_VEIL) {
             MouseSimulator.simulateRightClick(client);
             phaseTimer = getRandomizedWait(); // Wait before next single click
         }
+    }
+
+    private static void executeClickOnlyLoop(MinecraftClient client) {
+        if (clickOnlyState == ClickOnlyState.CLICK_SEQUENCE) {
+            if (clickOnlyClickCounter < FlareConfig.getClickCount()) {
+                MouseSimulator.simulateRightClick(client);
+                clickOnlyClickCounter++;
+                phaseTimer = getRandomizedClickDelay();
+                return;
+            }
+
+            clickOnlyState = ClickOnlyState.WAIT_FOR_FLARE_DEATH;
+            clickOnlyWaitStartTime = System.currentTimeMillis();
+            clickOnlyClickCounter = 0;
+            phaseTimer = 1;
+            return;
+        }
+
+        long waited = System.currentTimeMillis() - clickOnlyWaitStartTime;
+        if (waited >= FLARE_DEATH_TIMEOUT_MS) {
+            // Flare still alive after timeout - repeat the same click sequence
+            clickOnlyState = ClickOnlyState.CLICK_SEQUENCE;
+            clickOnlyClickCounter = 0;
+            clickOnlyWaitStartTime = 0;
+            sendMessage("Flare still alive after 30s. Repeating click sequence...", Formatting.YELLOW);
+        }
+
+        phaseTimer = 1;
     }
 
     /**
@@ -316,7 +414,11 @@ public class FlareMacroFeature {
         hyperionSlot = -1;
 
         int combatMode = FlareConfig.getCombatMode();
-        String weaponToFind = combatMode == 1 ? "Hyperion" : "Fire Veil Wand";
+        if (combatMode == FlareConfig.COMBAT_MODE_FLARE_CLICK_ONLY) {
+            return true;
+        }
+
+        String weaponToFind = combatMode == FlareConfig.COMBAT_MODE_HYPERION ? "Hyperion" : "Fire Veil Wand";
 
         // Scan hotbar (slots 0-8)
         for (int i = 0; i < 9; i++) {
@@ -346,6 +448,86 @@ public class FlareMacroFeature {
         }
 
         return overfluxSlot != -1 && hyperionSlot != -1;
+    }
+
+    private static boolean handleAtonementOverride(MinecraftClient client) {
+        if (healOverrideState == HealOverrideState.WAIT_AFTER_WAND_SWITCH) {
+            if (healTimer > 0) {
+                healTimer--;
+                return true;
+            }
+
+            MouseSimulator.simulateRightClick(client);
+            if (healReturnSlot != -1 && client.player.getInventory().getSelectedSlot() != healReturnSlot) {
+                client.player.getInventory().setSelectedSlot(healReturnSlot);
+            }
+
+            lastAtonementUseTime = System.currentTimeMillis();
+
+            healOverrideState = HealOverrideState.WAIT_AFTER_HEAL_CLICK;
+            healTimer = getRandomizedClickDelay();
+            return true;
+        }
+
+        if (healOverrideState == HealOverrideState.WAIT_AFTER_HEAL_CLICK) {
+            if (healTimer > 0) {
+                healTimer--;
+                return true;
+            }
+
+            healOverrideState = HealOverrideState.IDLE;
+            healReturnSlot = -1;
+            return true;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastAtonementUseTime < ATONEMENT_INTERVAL_MS) {
+            return false;
+        }
+
+        atonementSlot = findHotbarSlot(client, "Wand of Atonement");
+        if (atonementSlot == -1) {
+            if (now - lastMissingAtonementWarnAt >= 3000) {
+                sendMessage("Wand of Atonement not found in hotbar!", Formatting.RED);
+                lastMissingAtonementWarnAt = now;
+            }
+            return false;
+        }
+
+        healReturnSlot = findHotbarSlot(client, "Hyperion");
+        if (healReturnSlot == -1) {
+            healReturnSlot = hyperionSlot != -1 ? hyperionSlot : client.player.getInventory().getSelectedSlot();
+        }
+
+        if (client.player.getInventory().getSelectedSlot() != atonementSlot) {
+            client.player.getInventory().setSelectedSlot(atonementSlot);
+        }
+
+        healOverrideState = HealOverrideState.WAIT_AFTER_WAND_SWITCH;
+        healTimer = getRandomizedClickDelay();
+        sendMessage("Using Wand of Atonement...", Formatting.YELLOW);
+        return true;
+    }
+
+    private static int findHotbarSlot(MinecraftClient client, String itemNamePart) {
+        String target = itemNamePart.toLowerCase();
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = client.player.getInventory().getStack(i);
+            if (stack.isEmpty()) {
+                continue;
+            }
+
+            String stackName = stack.getName().getString().toLowerCase();
+            if (stackName.contains(target)) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static boolean isClickOnlyMode() {
+        return FlareConfig.getCombatMode() == FlareConfig.COMBAT_MODE_FLARE_CLICK_ONLY;
     }
 
     private static String getEntityDisplayName(Entity entity) {
